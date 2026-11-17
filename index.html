@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 :root{
   --bg:#F4F2EE;--card:#FFFFFF;--ink:#24221E;--muted:#6E6A62;--faint:#A29D93;--line:#E6E2DA;--line2:#D6D0C5;--soft:#F0EDE7;
@@ -234,7 +235,39 @@ table.sheet{border-collapse:separate;border-spacing:0;font-size:.86rem;width:100
 .steps span{color:var(--muted);font-size:.92rem}
 footer.foot{color:var(--faint);font-size:.82rem;padding:24px 28px 40px;border-top:1px solid var(--line);line-height:1.6}
 
+/* Auth */
+body.locked header.top, body.locked main, body.locked footer.foot{display:none}
+.auth{position:fixed;inset:0;display:none;place-items:center;padding:24px;background:var(--bg);z-index:80;overflow:auto}
+body.locked .auth{display:grid}
+.authbox{width:min(440px,100%);background:#fff;border:1px solid var(--line);border-radius:22px;padding:40px 38px}
+.authbox .mark{width:44px;height:44px;border-radius:12px;margin-bottom:22px}
+.authbox h1{font-size:1.7rem;margin-bottom:6px}
+.authbox form{display:flex;flex-direction:column;gap:16px;margin-top:26px}
+.authbox .btn{width:100%;height:50px;margin-top:6px}
+.autherr{background:var(--accent-soft);color:var(--accent-ink);border-radius:12px;padding:11px 14px;font-size:.92rem;display:none}
+.autherr.on{display:block}
+/* User menu & engagement switcher */
+.engsel{border:0;background:transparent;padding:0 22px 0 0;font-size:.8rem;color:var(--muted);width:auto;max-width:280px;border-radius:6px;cursor:pointer;text-overflow:ellipsis}
+.engsel:focus{box-shadow:none}
+.usermenu{position:relative;flex:none}
+.avatar{width:42px;height:42px;border-radius:50%;background:var(--ink);color:#fff;border:0;font-weight:600;cursor:pointer;font-size:.9rem;letter-spacing:.02em;display:inline-grid;place-items:center;flex:none}
+.avatar.admin{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent)}
+.menu{position:absolute;right:0;top:52px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 18px 40px -20px rgba(36,34,30,.35);min-width:250px;padding:8px;display:none;z-index:40}
+.menu.on{display:block}
+.menu .who{padding:12px 14px 14px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.menu .who b{display:block}
+.menu button{display:block;width:100%;text-align:left;border:0;background:none;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:.95rem}
+.menu button:hover{background:var(--soft)}
+.userrow{display:grid;grid-template-columns:48px minmax(0,1.4fr) minmax(0,1fr) 170px 250px;gap:16px;align-items:center;padding:16px 4px;border-top:1px solid var(--line)}
+.userrow:first-child{border-top:0}
+.userrow .avatar{width:44px;height:44px;cursor:default}
+.userrow .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.banner{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--accent-soft);border:1px solid #F2CDB0;border-radius:16px;padding:18px 22px;margin:24px 0 0}
+.byline{font-size:.82rem;color:var(--faint);margin-top:6px}
 @media (max-width:980px){
+  .userrow{grid-template-columns:44px 1fr;}
+  .userrow > :nth-child(n+3){grid-column:2}
+  .userrow .acts{justify-content:flex-start}
   .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
   .two,.welcome,.stdlayout{grid-template-columns:1fr}
   .toolbar{grid-template-columns:1fr 1fr}
@@ -257,22 +290,25 @@ footer.foot{color:var(--faint);font-size:.82rem;padding:24px 28px 40px;border-to
 }
 </style>
 </head>
-<body>
+<body class="locked">
 <header class="top"><div class="wrap">
-  <div class="brand"><span class="mark"><i></i></span><div><b>Audit Tracker</b><small id="engLabel"></small></div></div>
+  <div class="brand"><span class="mark"><i></i></span><div><b>Audit Tracker</b><select class="engsel" id="engSel" aria-label="Engagement"></select></div></div>
   <nav class="tabs" id="tabs">
     <a href="#overview" data-v="overview">Overview</a>
     <a href="#issues" data-v="issues">Issues <span class="count" id="issueCount"></span></a>
     <a href="#workpapers" data-v="workpapers">Workpapers</a>
     <a href="#standards" data-v="standards">Standards</a>
+    <a href="#users" data-v="users" id="usersTab" hidden>Users</a>
   </nav>
-  <span class="save" id="saveStatus">Saved on this device</span>
+  <span class="save" id="saveStatus">Connecting…</span>
+  <div class="usermenu"><button class="avatar" id="avatar" data-act="menu" aria-label="Account menu"></button><div class="menu" id="menu"></div></div>
 </div></header>
 
+<div class="auth" id="auth"></div>
 <main class="wrap" id="view"></main>
 
 <footer class="wrap foot">
-  Standard references follow the Singapore Standards on Auditing (SSAs, Singapore's adoption of the ISAs) and Singapore Financial Reporting Standards (International) — SFRS(I), which are identical to IFRS Accounting Standards. Paragraph summaries are paraphrased to help you navigate; always read the authoritative text before concluding. Check which versions apply to the period under audit — for example, the revised fraud standard, and SFRS(I) 18, which replaces SFRS(I) 1-1 for annual periods beginning on or after 1 January 2027. Automated tests flag items for auditor judgement; they are not conclusions. Data is stored only in this browser.
+  Standard references follow the Singapore Standards on Auditing (SSAs, Singapore's adoption of the ISAs) and Singapore Financial Reporting Standards (International) — SFRS(I), which are identical to IFRS Accounting Standards. Paragraph summaries are paraphrased to help you navigate; always read the authoritative text before concluding. Check which versions apply to the period under audit — for example, the revised fraud standard, and SFRS(I) 18, which replaces SFRS(I) 1-1 for annual periods beginning on or after 1 January 2027. Automated tests flag items for auditor judgement; they are not conclusions. Data is saved to your team's Supabase project and shared with signed-in team members.
 </footer>
 
 <div class="scrim" id="scrim" data-act="close"></div>
@@ -453,30 +489,112 @@ const sfrsMap = t => { const o=[]; for (const [rx,refs] of SFRS_MAP) if (rx.test
 /* ============================================================
    State
    ============================================================ */
-const LS_KEY = 'auditTracker.v1';
-const fresh = () => ({ settings:{ entity:'', engagement:'FY2026 statutory audit', fyEnd:'2026-12-31', currency:'SGD', om:500000, pmPct:75, ctPct:5, roundMin:10000, approvalLimit:5000, tests:{} }, files:[], issues:[], seq:1 });
-let state = load();
-const ui = { view:'overview', f:{q:'',risk:'',prio:'',status:'active',file:'',sort:'rank'}, sel:null, std:'SSA 240', para:null, drawer:null };
+/* ---------- Supabase ---------- */
+const SUPABASE_URL = 'https://efcrblpnggfwcgjrezfr.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_GxhDYYOeBW9NIFZxiyhhzw_JcalrJ9A';
+const EMAIL_DOMAIN = 'auditapp.local';
+const LS_KEY = 'auditTracker.v1';           // pre-login local data (offered for import)
+const LS_ENG = 'auditTracker.engagement';   // last engagement opened on this device
+const sb = (window.supabase && window.supabase.createClient) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth:{ persistSession:true, autoRefreshToken:true, storageKey:'auditTracker.auth' } }) : null;
 
-function load(){
-  try { const s = JSON.parse(localStorage.getItem(LS_KEY)); if (s && Array.isArray(s.issues)) { const f = fresh(); s.settings = Object.assign(f.settings, s.settings||{}); s.files = s.files||[]; s.seq = s.seq||1; return s; } } catch(e){}
-  return fresh();
-}
+const fresh = () => ({ settings:{ entity:'', engagement:'FY2026 statutory audit', fyEnd:'2026-12-31', currency:'SGD', om:500000, pmPct:75, ctPct:5, roundMin:10000, approvalLimit:5000, tests:{} }, files:[], issues:[], seq:1 });
+let state = fresh();
+let me = null, team = new Map(), engagements = [], ENG = null;
+let synced = { settings:'', files:new Map(), issues:new Map() };
+const ui = { view:'overview', f:{q:'',risk:'',prio:'',status:'active',file:'',sort:'rank'}, sel:null, std:'SSA 240', para:null, drawer:null };
+const lsGet = k => { try { return localStorage.getItem(k); } catch(e){ return null; } };
+const lsSet = (k,v) => { try { localStorage.setItem(k,v); } catch(e){} };
+
+function setSave(text, warn){ const el=document.getElementById('saveStatus'); if(!el) return; el.textContent=text; el.classList.toggle('warn',!!warn); }
 let saveTimer=null;
-function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(save,350); }
-function save(){
-  const el = document.getElementById('saveStatus');
-  const tryWrite = obj => { localStorage.setItem(LS_KEY, JSON.stringify(obj)); };
-  try { tryWrite(state); el.textContent='Saved on this device'; el.classList.remove('warn'); return; } catch(e){}
-  try { const slim = {...state, files: state.files.map(f=>({...f, sheets:f.sheets.map(s=>({...s, aoa:s.aoa.slice(0,400), trimmed:s.aoa.length>400}))}))}; tryWrite(slim); el.textContent='Saved (large previews trimmed)'; el.classList.add('warn'); return; } catch(e){}
-  try { const slim = {...state, files: state.files.map(f=>({...f, sheets:f.sheets.map(s=>({name:s.name, aoa:[], or:s.or, oc:s.oc, H:s.H, trimmed:true}))}))}; tryWrite(slim); el.textContent='Saved (issues only — workbooks too large)'; el.classList.add('warn'); return; } catch(e){}
-  el.textContent='Not saved — browser storage unavailable'; el.classList.add('warn');
+function scheduleSave(){ if(!ENG) return; setSave('Saving…'); clearTimeout(saveTimer); saveTimer=setTimeout(sync,600); }
+function save(){ if(!ENG) return; setSave('Saving…'); clearTimeout(saveTimer); saveTimer=setTimeout(sync,250); }
+
+const toSettings = e => ({ entity:e.entity||'', engagement:e.name||'', fyEnd:e.fy_end||'', currency:e.currency||'SGD', om:+e.overall_materiality, pmPct:+e.pm_pct, ctPct:+e.ct_pct, roundMin:+e.round_min, approvalLimit:+e.approval_limit, tests:e.tests||{} });
+const fromSettings = st => ({ entity:st.entity||'', name:st.engagement||'Audit engagement', fy_end:isISO(st.fyEnd)?st.fyEnd:null, currency:st.currency||'SGD', overall_materiality:+st.om||0, pm_pct:+st.pmPct||0, ct_pct:+st.ctPct||0, round_min:+st.roundMin||0, approval_limit:+st.approvalLimit||0, tests:st.tests||{} });
+const DETAIL_KEYS = ['rows','cells','addrs','ncells','base','floor','fraud','p1','override','touched','refsEdited'];
+function issueToRow(it){
+  const detail={}; DETAIL_KEYS.forEach(k=>{ if (it[k]!==undefined) detail[k]=it[k]; });
+  return { id:it.id, engagement_id:ENG, ref:it.ref||'', issue_key:it.key||null, source:it.source==='auto'?'auto':'manual', test:it.test||'manual',
+    title:it.title||'', description:it.desc||'', amount:+it.amount||0, risk:it.risk||'Medium', priority:it.priority||'P2', status:it.status||'Open', assertion:it.assertion||'',
+    workbook_id:(it.fileId && state.files.some(f=>f.id===it.fileId)) ? it.fileId : null, file_name:it.file||'', sheet:it.sheet||'', cell_ref:it.cellRef||'',
+    ssa_refs:it.ssa||[], sfrs_refs:it.sfrs||[], notes:it.notes||'', response:it.response||'', detail };
 }
+const rowToIssue = r => ({ ...(r.detail||{}), id:r.id, ref:r.ref, key:r.issue_key||undefined, source:r.source, test:r.test, title:r.title, desc:r.description, amount:+r.amount,
+  risk:r.risk, priority:r.priority, status:r.status, assertion:r.assertion, fileId:r.workbook_id, file:r.file_name, sheet:r.sheet, cellRef:r.cell_ref,
+  ssa:r.ssa_refs||[], sfrs:r.sfrs_refs||[], notes:r.notes, response:r.response, created:Date.parse(r.created_at), createdBy:r.created_by, updatedBy:r.updated_by, updatedAt:r.updated_at });
+const fileHash = f => [f.name, f.size||0, f.added||0, f.sheets.map(x=>x.name+':'+((x.aoa||[]).length)+':'+(x.H??'')).join(',')].join('|');
+
+let syncing=false, syncAgain=false;
+async function sync(){
+  if (!sb || !ENG || !me) return;
+  if (syncing) { syncAgain=true; return; }
+  syncing=true; const eng=ENG;
+  try {
+    const srow=fromSettings(state.settings), sh=JSON.stringify(srow);
+    if (sh!==synced.settings) {
+      const { error } = await sb.from('engagements').update(srow).eq('id',eng); if (error) throw error;
+      synced.settings=sh; const e=engagements.find(x=>x.id===eng); if (e) Object.assign(e,srow); renderEngSelect();
+    }
+    const fIds=new Set(state.files.map(f=>f.id));
+    const delF=[...synced.files.keys()].filter(id=>!fIds.has(id));
+    if (delF.length) { const { error } = await sb.from('workbooks').delete().in('id',delF); if (error) throw error; delF.forEach(id=>synced.files.delete(id)); }
+    for (const f of state.files) {
+      const h=fileHash(f); if (synced.files.get(f.id)===h) continue;
+      const { error } = await sb.from('workbooks').upsert({ id:f.id, engagement_id:eng, name:f.name, size_bytes:f.size||0, sheets:f.sheets, uploaded_at:new Date(f.added||Date.now()).toISOString() });
+      if (error) throw error; synced.files.set(f.id,h);
+    }
+    const iIds=new Set(state.issues.map(i=>i.id));
+    const delI=[...synced.issues.keys()].filter(id=>!iIds.has(id));
+    for (let k=0;k<delI.length;k+=200) { const part=delI.slice(k,k+200); const { error } = await sb.from('issues').delete().in('id',part); if (error) throw error; part.forEach(id=>synced.issues.delete(id)); }
+    const up=[]; state.issues.forEach(it=>{ const row=issueToRow(it), h=JSON.stringify(row); if (synced.issues.get(it.id)!==h) up.push({row,h,id:it.id}); });
+    for (let k=0;k<up.length;k+=100) {
+      const part=up.slice(k,k+100);
+      const { data, error } = await sb.from('issues').upsert(part.map(x=>x.row)).select('id,created_by,updated_by,updated_at');
+      if (error) throw error;
+      part.forEach(x=>synced.issues.set(x.id,x.h));
+      (data||[]).forEach(d=>{ const it=state.issues.find(i=>i.id===d.id); if (it) { it.createdBy=it.createdBy||d.created_by; it.updatedBy=d.updated_by; it.updatedAt=d.updated_at; } });
+    }
+    setSave('Saved to Supabase');
+  } catch(e) {
+    console.error(e); setSave('Not saved — retrying', true);
+    toast('Could not save: '+(e.message||e)); clearTimeout(saveTimer); saveTimer=setTimeout(sync,8000);
+  } finally { syncing=false; if (syncAgain) { syncAgain=false; setTimeout(sync,50); } }
+}
+async function fetchAll(make){
+  const out=[]; for (let from=0;;from+=1000) { const { data, error } = await make().range(from, from+999); if (error) throw error; out.push(...(data||[])); if (!data || data.length<1000) break; } return out;
+}
+async function loadEngagement(id){
+  setSave('Loading…');
+  const [{ data:e, error:e1 }, wbs, iss] = await Promise.all([
+    sb.from('engagements').select('*').eq('id',id).single(),
+    fetchAll(()=>sb.from('workbooks').select('*').eq('engagement_id',id).order('uploaded_at')),
+    fetchAll(()=>sb.from('issues').select('*').eq('engagement_id',id).order('created_at')) ]);
+  if (e1) throw e1;
+  ENG=id; lsSet(LS_ENG,id);
+  state = { settings:Object.assign(fresh().settings, toSettings(e)),
+    files:wbs.map(w=>({ id:w.id, name:w.name, size:+w.size_bytes, added:Date.parse(w.uploaded_at), uploadedBy:w.uploaded_by, sheets:w.sheets||[] })),
+    issues:iss.map(rowToIssue), seq:1 };
+  state.seq = 1 + Math.max(0, ...state.issues.map(i=>+(String(i.ref).match(/(\d+)$/)||[0,0])[1]));
+  synced = { settings:JSON.stringify(fromSettings(state.settings)), files:new Map(state.files.map(f=>[f.id,fileHash(f)])), issues:new Map(state.issues.map(i=>[i.id,JSON.stringify(issueToRow(i))])) };
+  ui.sel=null; if (ui.drawer) { ui.drawer=null; $('#drawer').classList.remove('on'); $('#scrim').classList.remove('on'); }
+  renderEngSelect(); setSave('Saved to Supabase');
+}
+async function loadEngagements(){ const { data, error } = await sb.from('engagements').select('id,name,entity,fy_end').order('created_at'); if (error) throw error; engagements=data||[]; }
+async function loadTeam(){ const { data, error } = await sb.from('profiles').select('*').order('username'); if (error) throw error; team=new Map((data||[]).map(p=>[p.id,p])); if (me && team.has(me.id)) me=team.get(me.id); }
+async function createEngagement(name){
+  const st=fresh().settings; st.engagement=name||'New engagement';
+  const { data, error } = await sb.from('engagements').insert(fromSettings(st)).select('id,name,entity,fy_end').single(); if (error) throw error;
+  engagements.push(data); return data.id;
+}
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16);}));
+const nextRef = () => 'AT-' + String(state.seq++).padStart(3,'0');
+const who = id => { const p=team.get(id); return p ? (p.display_name||p.username) : (id ? 'a former user' : '—'); };
+const initials = p => ((p&&(p.display_name||p.username))||'?').split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+const ago = iso => { if(!iso) return ''; const s=(Date.now()-Date.parse(iso))/1000; if(s<60) return 'just now'; if(s<3600) return Math.floor(s/60)+' min ago'; if(s<86400) return Math.floor(s/3600)+' h ago'; return new Date(iso).toLocaleDateString('en-SG',{day:'numeric',month:'short',year:'numeric'}); };
 const S = () => state.settings;
 const pm = () => S().om * S().pmPct / 100;
 const ct = () => S().om * S().ctPct / 100;
-const uid = () => Math.random().toString(36).slice(2,10);
-const nextId = () => 'AT-' + String(state.seq++).padStart(3,'0');
 
 /* ============================================================
    Helpers
@@ -972,7 +1090,7 @@ function mergeIssues(found, fileId){
       if (!ex.refsEdited) Object.assign(ex, {ssa:n.ssa, sfrs:n.sfrs});
       rateIssue(ex);
     } else {
-      Object.assign(n, {id:nextId(), status:'Open', notes:'', response:'', created:Date.now()});
+      Object.assign(n, {id:uid(), ref:nextRef(), status:'Open', notes:'', response:'', created:Date.now(), createdBy:me&&me.id});
       rateIssue(n); state.issues.push(n);
     }
   });
@@ -1013,7 +1131,7 @@ function issueCard(it, rank, compact){
   return `<article class="issue ${compact?'compact':''} ${done?'done':''}" data-act="open" data-id="${it.id}">
     <div class="rank ${rank&&it.risk==='Significant'?'hot':''}">${rank?'#'+rank:'—'}</div>
     <div>
-      <div class="chips">${riskChip(it.risk)}${prioChip(it.priority)}${compact?'':`<span class="chip ghost">${esc(it.status)}</span>`}<span class="tag">${esc(it.id)} · ${esc(testName(it.test))}</span></div>
+      <div class="chips">${riskChip(it.risk)}${prioChip(it.priority)}${compact?'':`<span class="chip ghost">${esc(it.status)}</span>`}<span class="tag">${esc(it.ref)} · ${esc(testName(it.test))}</span></div>
       <h3>${esc(it.title)}</h3>
       <p class="loc">${PIN}<span>${esc(locText(it))}</span></p>
       ${compact?'':`<div class="chips">${[...(it.ssa||[]),...(it.sfrs||[])].map(r=>refChip(r)).join('')}</div>`}
@@ -1063,7 +1181,8 @@ function vWelcome(){
     </ol>
   </section>`;
 }
-function vOverview(){
+function vOverview(){ return localImportBanner() + vOverviewBody(); }
+function vOverviewBody(){
   if (!state.issues.length && !state.files.length) return vWelcome();
   const act=state.issues.filter(active), all=state.issues;
   const amt=act.reduce((s,i)=>s+Math.abs(i.amount||0),0);
@@ -1105,7 +1224,7 @@ function filteredIssues(){
     if (f.risk && it.risk!==f.risk) return false;
     if (f.prio && it.priority!==f.prio) return false;
     if (f.file && it.file!==f.file) return false;
-    if (q && ![it.id,it.title,it.desc,it.file,it.sheet,it.notes,...(it.ssa||[]),...(it.sfrs||[]),testName(it.test)].join(' ').toLowerCase().includes(q)) return false;
+    if (q && ![it.ref,it.title,it.desc,it.file,it.sheet,it.notes,...(it.ssa||[]),...(it.sfrs||[]),testName(it.test)].join(' ').toLowerCase().includes(q)) return false;
     return true;
   });
   const sorters={rank:(a,b)=>score(b)-score(a), amount:(a,b)=>Math.abs(b.amount||0)-Math.abs(a.amount||0), newest:(a,b)=>(b.created||0)-(a.created||0)};
@@ -1142,7 +1261,7 @@ function vWorkpapers(){
     <div class="drop" id="drop" data-act="upload">${UP}<div class="big">Drop Excel files here, or click to browse</div><div class="muted sm">.xlsx · .xlsm · .xls · .csv — up to 5,000 rows × 40 columns per sheet. A tracker backup (.json) can be dropped here too. Files stay in your browser.</div></div>
     <div style="display:flex;justify-content:center;margin-top:16px"><button class="link" data-act="sample">Or load a sample workbook with seeded exceptions</button></div>
   </section>
-  <section class="card" style="margin-bottom:18px"><div class="card-head"><div><h2>Engagement & materiality</h2><p class="muted sm">Thresholds drive the tests and risk ranking (SSA 320 ¶10–11, SSA 450 ¶5)</p></div></div>
+  <section class="card" style="margin-bottom:18px"><div class="card-head"><div><h2>Engagement & materiality</h2><p class="muted sm">Thresholds drive the tests and risk ranking (SSA 320 ¶10–11, SSA 450 ¶5). Changes are shared with the whole team.</p></div>${me&&me.role==='admin'?'<button class="btn sm ghost" data-act="deleng">Delete engagement</button>':''}</div>
     <div class="field-grid">
       ${fld('entity','Entity','text','','wide')}${fld('engagement','Engagement','text','','wide')}
       ${fld('fyEnd','Financial year end','date','Used for cut-off tests')}
@@ -1163,7 +1282,7 @@ function vWorkpapers(){
     const fi=state.issues.filter(i=>i.fileId===f.id);
     const isSel = ui.sel.fileId===f.id;
     h+=`<section class="card" style="margin-bottom:18px"><div class="filehead">
-      <div style="display:flex;gap:14px;align-items:center;min-width:0"><span class="fileicon">${esc((f.name.split('.').pop()||'').toUpperCase().slice(0,4))}</span><div style="min-width:0"><h2 style="word-break:break-word">${esc(f.name)}</h2><div class="muted sm">${f.sheets.length} ${plural(f.sheets.length,'sheet','sheets')} · ${fi.filter(active).length} open ${plural(fi.filter(active).length,'issue','issues')} · added ${new Date(f.added).toLocaleDateString('en-SG',{day:'numeric',month:'short'})}</div></div></div>
+      <div style="display:flex;gap:14px;align-items:center;min-width:0"><span class="fileicon">${esc((f.name.split('.').pop()||'').toUpperCase().slice(0,4))}</span><div style="min-width:0"><h2 style="word-break:break-word">${esc(f.name)}</h2><div class="muted sm">${f.sheets.length} ${plural(f.sheets.length,'sheet','sheets')} · ${fi.filter(active).length} open ${plural(fi.filter(active).length,'issue','issues')} · added ${new Date(f.added).toLocaleDateString('en-SG',{day:'numeric',month:'short'})}${f.uploadedBy?' by '+esc(who(f.uploadedBy)):''}</div></div></div>
       <div class="actions"><button class="btn sm" data-act="viewfile" data-file="${esc(f.name)}">View issues</button><button class="btn sm ghost" data-act="rmfile" data-id="${f.id}">Remove</button></div></div>
       <div class="sheettabs">${f.sheets.map(s=>{const n=fi.filter(i=>i.sheet===s.name&&active(i)).length;return `<button class="${isSel&&ui.sel.sheet===s.name?'on':''}" data-act="sheet" data-id="${f.id}" data-sheet="${esc(s.name)}">${esc(s.name)}${n?`<span class="n">${n}</span>`:''}</button>`;}).join('')}</div>`;
     if (isSel) {
@@ -1193,7 +1312,7 @@ function vStandards(){
       <h1 style="font-size:1.9rem;margin:8px 0 6px">${esc(ui.std)}</h1>
       <p class="lede" style="margin:0 0 24px">${esc(s.t)}</p>
       ${paraKeys(ui.std).map(k=>[k,s.p[k]]).map(([k,txt])=>{ const ref=ui.std+' ¶'+k; const l=idx.get(ref)||[];
-        return `<div class="para ${ui.para===k?'hit':''}" id="para-${esc(k.replace(/[^\w]/g,'_'))}"><span class="pn">¶${esc(k)}</span><div><p>${esc(txt)}</p>${l.length?`<div class="linked">${l.map(i=>`<button data-act="open" data-id="${i.id}"><b>${i.id}</b> · ${esc(i.title.length>48?i.title.slice(0,46)+'…':i.title)}</button>`).join('')}</div>`:''}</div></div>`; }).join('')}
+        return `<div class="para ${ui.para===k?'hit':''}" id="para-${esc(k.replace(/[^\w]/g,'_'))}"><span class="pn">¶${esc(k)}</span><div><p>${esc(txt)}</p>${l.length?`<div class="linked">${l.map(i=>`<button data-act="open" data-id="${i.id}"><b>${esc(i.ref)}</b> · ${esc(i.title.length>48?i.title.slice(0,46)+'…':i.title)}</button>`).join('')}</div>`:''}</div></div>`; }).join('')}
       <p class="muted sm" style="margin-top:20px">Paraphrased summary of selected paragraphs, for navigation. Refer to the full standard, including application material, before concluding.</p>
     </section></div>`;
 }
@@ -1208,8 +1327,9 @@ function drawerHTML(it){
   const groups=Object.keys(STD).map(code=>`<optgroup label="${esc(code)} — ${esc(STD[code].t)}">${paraKeys(code).map(p=>{const r=code+' ¶'+p;return used.has(r)?'':`<option value="${esc(r)}">${esc(r)}</option>`;}).join('')}</optgroup>`).join('');
   const refs=[...(it.ssa||[]),...(it.sfrs||[])];
   return `<div class="dhead"><div>
-      <div class="chips" id="dchips">${riskChip(it.risk)}${prioChip(it.priority)}<span class="tag">${esc(it.id)}${rank?' · ranked #'+rank:''} · ${esc(testName(it.test))}</span></div>
+      <div class="chips" id="dchips">${riskChip(it.risk)}${prioChip(it.priority)}<span class="tag">${esc(it.ref)}${rank?' · ranked #'+rank:''} · ${esc(testName(it.test))}</span></div>
       <input class="title-in" data-f="title" value="${esc(it.title)}" aria-label="Issue title">
+      <div class="byline" id="dbyline">${bylineText(it)}</div>
     </div><button class="icon" data-act="close" aria-label="Close">×</button></div>
   <div class="dbody">
     <section class="dsec"><div class="amtrow"><div><label>Amount (${esc(S().currency)})</label><input class="big-in" data-f="amount" type="number" step="0.01" value="${it.amount||0}"></div>
@@ -1243,9 +1363,10 @@ function openDrawer(id){
   $('#drawer .dbody').scrollTop=0;
 }
 function closeDrawer(){ ui.drawer=null; $('#drawer').classList.remove('on'); $('#scrim').classList.remove('on'); render(); }
+function bylineText(it){ const parts=[]; if (it.createdBy) parts.push('Created by '+esc(who(it.createdBy))); if (it.updatedBy && it.updatedAt) parts.push('last updated by '+esc(who(it.updatedBy))+' '+ago(it.updatedAt)); return parts.join(' · ') || 'Not saved yet'; }
 function refreshDrawerBits(it){
   const rank=rankMap().get(it.id);
-  const c=$('#dchips'); if(c) c.innerHTML=`${riskChip(it.risk)}${prioChip(it.priority)}<span class="tag">${esc(it.id)}${rank?' · ranked #'+rank:''} · ${esc(testName(it.test))}</span>`;
+  const c=$('#dchips'); if(c) c.innerHTML=`${riskChip(it.risk)}${prioChip(it.priority)}<span class="tag">${esc(it.ref)}${rank?' · ranked #'+rank:''} · ${esc(testName(it.test))}</span>`;
   const p=$('#dpct'); if(p) p.innerHTML=`${matPct(it.amount)}<br>Performance materiality ${fmt(pm())}`;
   ['risk','priority'].forEach(f=>{ const s=$(`#drawer select[data-f="${f}"]`); if(s && s!==document.activeElement) s.value=it[f]; });
 }
@@ -1259,8 +1380,8 @@ function closeModal(){ $('#modal').classList.remove('on'); }
 function csv(){
   const rm=rankMap();
   const q=v=>{ v=String(v??''); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
-  const head=['Rank','ID','Title','Risk','Priority','Status','Amount','Currency','Workbook','Sheet','Cells','SSA references','SFRS(I) references','Assertion','Test','Finding','Notes','Resolution'];
-  const rows=filteredIssues().map(it=>[rm.get(it.id)||'',it.id,it.title,it.risk,it.priority,it.status,it.amount,S().currency,it.file,it.sheet,it.source==='auto'?(it.addrs||[]).join(' '):it.cellRef,(it.ssa||[]).join('; '),(it.sfrs||[]).join('; '),it.assertion,testName(it.test),it.desc,it.notes,it.response]);
+  const head=['Rank','Ref','Title','Risk','Priority','Status','Amount','Currency','Workbook','Sheet','Cells','SSA references','SFRS(I) references','Assertion','Test','Finding','Notes','Resolution'];
+  const rows=filteredIssues().map(it=>[rm.get(it.id)||'',it.ref,it.title,it.risk,it.priority,it.status,it.amount,S().currency,it.file,it.sheet,it.source==='auto'?(it.addrs||[]).join(' '):it.cellRef,(it.ssa||[]).join('; '),(it.sfrs||[]).join('; '),it.assertion,testName(it.test),it.desc,it.notes,it.response]);
   return [head,...rows].map(r=>r.map(q).join(',')).join('\n');
 }
 function copyFrom(id){
@@ -1367,15 +1488,25 @@ function addFile(file){
   save(); render();
   toast(`${file.name}: ${found.length} ${plural(found.length,'finding','findings')} across ${file.sheets.length} ${plural(file.sheets.length,'sheet','sheets')}`);
 }
+const isUUID = v => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v||''));
 function importBackup(obj, name){
   if (!obj || !Array.isArray(obj.issues)) throw new Error('not a tracker backup');
   const empty = !state.files.length && !state.issues.length;
   if (empty && obj.settings) state.settings = Object.assign(fresh().settings, obj.settings);
-  (obj.files||[]).forEach(f=>{ const ex=state.files.find(x=>x.name===f.name); if (ex) state.files=state.files.map(x=>x.name===f.name?f:x); else state.files.push(f); });
-  const ids=new Set(state.issues.map(i=>i.id)); const keys=new Set(state.issues.map(i=>i.key).filter(Boolean));
-  let added=0;
-  obj.issues.forEach(it=>{ if (it.key && keys.has(it.key)) return; const n={...it}; if (ids.has(n.id)) n.id=nextId(); ids.add(n.id); state.issues.push(n); added++; });
-  const mx=Math.max(0,...state.issues.map(i=>+(String(i.id).match(/(\d+)$/)||[0,0])[1])); state.seq=Math.max(state.seq, mx+1);
+  // Map incoming workbook ids onto this engagement (same-name workbooks are replaced)
+  const idMap = new Map();
+  (obj.files||[]).forEach(f0=>{ const ex=state.files.find(x=>x.name===f0.name); const f={...f0, id: ex ? ex.id : uid()}; idMap.set(f0.id, f.id);
+    if (ex) state.files=state.files.map(x=>x.name===f.name?f:x); else state.files.push(f); });
+  const keys=new Set(state.issues.map(i=>i.key).filter(Boolean)); let added=0;
+  obj.issues.forEach(it=>{
+    const n={...it}; const oldFile=n.fileId;
+    if (oldFile && idMap.has(oldFile)) { n.fileId=idMap.get(oldFile); if (n.key) n.key=n.key.split(oldFile).join(n.fileId); }
+    if (n.key && keys.has(n.key)) return;
+    n.ref = n.ref || (isUUID(n.id) ? nextRef() : String(n.id||'')) || nextRef();
+    n.id = uid(); n.createdBy = me && me.id; delete n.updatedBy; delete n.updatedAt;
+    state.issues.push(n); if (n.key) keys.add(n.key); added++;
+  });
+  const mx=Math.max(0,...state.issues.map(i=>+(String(i.ref).match(/(\d+)$/)||[0,0])[1])); state.seq=Math.max(state.seq, mx+1);
   save(); render(); toast(`${name}: imported ${added} ${plural(added,'issue','issues')}${obj.files&&obj.files.length?` and ${obj.files.length} ${plural(obj.files.length,'workbook','workbooks')}`:''}`);
 }
 function handleFiles(list){
@@ -1389,7 +1520,7 @@ function handleFiles(list){
     fr.onload=()=>{ try {
       const wb=XLSX.read(new Uint8Array(fr.result),{type:'array',cellDates:true});
       const sheets=wb.SheetNames.map(n=>readSheet(wb.Sheets[n],n)); if (/\.csv$/i.test(f.name) && sheets.length===1) sheets[0].name=f.name.replace(/\.csv$/i,'').slice(0,60);
-      addFile({id:uid(), name:f.name, size:f.size, added:Date.now(), sheets});
+      addFile({id:uid(), name:f.name, size:f.size, added:Date.now(), uploadedBy:me&&me.id, sheets});
     } catch(err){ toast('Could not read '+f.name+': '+err.message); } };
     fr.readAsArrayBuffer(f);
   });
@@ -1402,12 +1533,13 @@ function render(){
   const v=ui.view, el=$('#view');
   document.querySelectorAll('#tabs a').forEach(a=>a.classList.toggle('on',a.dataset.v===v));
   const n=state.issues.filter(active).length; $('#issueCount').textContent=n||''; $('#issueCount').style.display=n?'':'none';
-  $('#engLabel').textContent=[S().entity,S().engagement].filter(Boolean).join(' · ');
-  el.innerHTML = v==='issues'?vIssues() : v==='workpapers'?vWorkpapers() : v==='standards'?vStandards() : vOverview();
+  if (!me) return;
+  el.innerHTML = v==='issues'?vIssues() : v==='workpapers'?vWorkpapers() : v==='standards'?vStandards() : (v==='users' && me.role==='admin')?vUsers() : vOverview();
+  if (v==='users' && me.role==='admin') loadTeam().then(()=>{ if (ui.view==='users') { const l=$('#userList'); if (l) l.innerHTML=userRows(); } }).catch(()=>{});
   if (v==='issues') renderIssueList();
   if (v==='standards' && ui.para) { const p=document.getElementById('para-'+ui.para.replace(/[^\w]/g,'_')); if(p) setTimeout(()=>p.scrollIntoView({block:'center',behavior:'smooth'}),30); }
 }
-function route(){ const h=location.hash.slice(1); ui.view=['overview','issues','workpapers','standards'].includes(h)?h:'overview'; render(); window.scrollTo(0,0); }
+function route(){ const h=location.hash.slice(1); ui.view=['overview','issues','workpapers','standards','users'].includes(h)?h:'overview'; render(); window.scrollTo(0,0); }
 function go(v){ if (location.hash.slice(1)===v) { ui.view=v; render(); window.scrollTo(0,0); } else location.hash=v; }
 window.addEventListener('hashchange', route);
 
@@ -1419,7 +1551,7 @@ document.addEventListener('click', e=>{
   else if (a==='open') { openDrawer(t.dataset.id); }
   else if (a==='close') { closeDrawer(); }
   else if (a==='add') {
-    const it={id:nextId(), source:'manual', test:'manual', title:'New issue', desc:'', amount:0, risk:'Medium', priority:'P2', status:'Open', assertion:'', file:'', sheet:'', cellRef:'', ssa:[], sfrs:[], notes:'', response:'', created:Date.now()};
+    const it={id:uid(), ref:nextRef(), createdBy:me&&me.id, source:'manual', test:'manual', title:'New issue', desc:'', amount:0, risk:'Medium', priority:'P2', status:'Open', assertion:'', file:'', sheet:'', cellRef:'', ssa:[], sfrs:[], notes:'', response:'', created:Date.now()};
     state.issues.push(it); save(); openDrawer(it.id); setTimeout(()=>{ const i=$('#drawer .title-in'); if(i){i.focus(); i.select();} },260);
   }
   else if (a==='gostd') { e.stopPropagation(); const [code,p]=splitRef(t.dataset.ref); ui.std=code; ui.para=p; if(ui.drawer){ ui.drawer=null; $('#drawer').classList.remove('on'); $('#scrim').classList.remove('on'); } go('standards'); }
@@ -1442,10 +1574,11 @@ document.addEventListener('click', e=>{
   else if (a==='viewfile') { ui.f={...ui.f, file:t.dataset.file, risk:'', prio:''}; go('issues'); }
   else if (a==='filterrisk') { ui.f={...ui.f, risk:t.dataset.risk, status:'active'}; go('issues'); }
   else if (a==='csv') { modal(`<div class="card-head" style="margin-bottom:0"><h2>Export issues (CSV)</h2><button class="icon" data-act="mclose">×</button></div><p class="muted sm" style="margin:6px 0 0">${filteredIssues().length} issues matching the current filters. Copy and paste into Excel or save as a .csv file.</p><textarea id="csvText" readonly>${esc(csv())}</textarea><div class="actions"><button class="btn primary" data-act="copy" data-src="csvText">Copy CSV</button></div>`); }
-  else if (a==='backup') { modal(`<div class="card-head" style="margin-bottom:0"><h2>Back up or restore</h2><button class="icon" data-act="mclose">×</button></div><p class="muted sm" style="margin:6px 0 0">Data lives only in this browser. Copy this text somewhere safe to back it up, or paste a backup here and restore.</p><textarea id="bkText">${esc(JSON.stringify(state))}</textarea><div class="actions"><button class="btn primary" data-act="copy" data-src="bkText">Copy backup</button><button class="btn" data-act="restore">Restore from pasted text</button><button class="btn ghost" data-act="reset">Clear all data</button></div>`); }
+  else if (a==='backup') { modal(`<div class="card-head" style="margin-bottom:0"><h2>Back up or restore</h2><button class="icon" data-act="mclose">×</button></div><p class="muted sm" style="margin:6px 0 0">This engagement is saved in Supabase. Copy this text to keep an offline copy, or paste a backup here to import its issues and workbooks into this engagement.</p><textarea id="bkText">${esc(JSON.stringify(state))}</textarea><div class="actions"><button class="btn primary" data-act="copy" data-src="bkText">Copy backup</button><button class="btn" data-act="restore">Import pasted backup</button><button class="btn ghost" data-act="reset">Clear this engagement</button></div>`); }
   else if (a==='copy') { copyFrom(t.dataset.src); }
-  else if (a==='restore') { try { const s=JSON.parse($('#bkText').value); if(!s||!Array.isArray(s.issues)) throw 0; const f=fresh(); s.settings=Object.assign(f.settings,s.settings||{}); s.files=s.files||[]; s.seq=s.seq||1; state=s; save(); closeModal(); render(); toast('Restored'); } catch(err){ toast('That text is not a valid backup'); } }
-  else if (a==='reset') { if (!t.dataset.armed) { t.dataset.armed='1'; t.textContent='Click again to erase everything'; return; } state=fresh(); save(); closeModal(); go('overview'); toast('All data cleared'); }
+  else if (a==='restore') { try { const s=JSON.parse($('#bkText').value); importBackup(s,'Backup'); closeModal(); } catch(err){ toast('That text is not a valid backup'); } }
+  else if (a==='reset') { if (!t.dataset.armed) { t.dataset.armed='1'; t.textContent='Click again to delete all issues and workbooks in this engagement'; return; } state.files=[]; state.issues=[]; state.seq=1; save(); closeModal(); go('overview'); toast('Engagement cleared'); }
+  else if (handleAccountAction(a,t,e)) { /* handled */ }
   else if (a==='mclose') { closeModal(); }
 });
 function openDrawerKeepScroll(id){ const b=$('#drawer .dbody'); const y=b?b.scrollTop:0; $('#drawer').innerHTML=drawerHTML(getIssue(id)); const nb=$('#drawer .dbody'); if(nb) nb.scrollTop=y; }
@@ -1479,9 +1612,209 @@ document.addEventListener('dragleave', e=>{ const d=e.target.closest&&e.target.c
 document.addEventListener('drop', e=>{ const d=e.target.closest&&e.target.closest('#drop'); if(d){ e.preventDefault(); d.classList.remove('over'); handleFiles(e.dataTransfer.files); } });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ if($('#modal').classList.contains('on')) closeModal(); else if(ui.drawer) closeDrawer(); } });
 
+
+/* ============================================================
+   Accounts: sign in, password, engagements, users
+   ============================================================ */
+const toEmail = u => { u=String(u||'').trim().toLowerCase(); return u.includes('@') ? u : `${u}@${EMAIL_DOMAIN}`; };
+const LOGO = '<span class="mark"><i></i></span>';
+function showAuth(mode, msg){
+  document.body.classList.add('locked');
+  const a=$('#auth');
+  if (mode==='login') a.innerHTML = `<div class="authbox">${LOGO}<p class="eyebrow">SFRS(I) · SSA</p><h1>Sign in</h1><p class="muted" style="margin:0">Audit Tracker — your team's audit testing workspace.</p>
+    <form id="loginForm" autocomplete="on">
+      <div class="autherr ${msg?'on':''}" id="authErr">${esc(msg||'')}</div>
+      <div><label for="liUser">Username</label><input id="liUser" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus></div>
+      <div><label for="liPass">Password</label><input id="liPass" name="password" type="password" autocomplete="current-password" required></div>
+      <button class="btn primary" type="submit" id="liBtn">Sign in</button>
+    </form><p class="muted sm" style="margin:22px 0 0">Accounts are created by your administrator. Forgotten your password? Ask an administrator to reset it.</p></div>`;
+  else if (mode==='change') a.innerHTML = `<div class="authbox">${LOGO}<p class="eyebrow">Welcome, ${esc(me.display_name||me.username)}</p><h1>Set a new password</h1><p class="muted" style="margin:0">You're signed in with an initial password. Choose your own before continuing.</p>
+    <form id="pwForm" autocomplete="off">
+      <div class="autherr ${msg?'on':''}" id="authErr">${esc(msg||'')}</div>
+      <input type="text" name="username" autocomplete="username" value="${esc(me.username)}" hidden>
+      <div><label for="pw1">New password</label><input id="pw1" type="password" autocomplete="new-password" minlength="8" required autofocus><div class="help">At least 8 characters, and not “password”.</div></div>
+      <div><label for="pw2">Confirm new password</label><input id="pw2" type="password" autocomplete="new-password" minlength="8" required></div>
+      <button class="btn primary" type="submit" id="pwBtn">Save password and continue</button>
+    </form><p style="margin:20px 0 0;text-align:center"><button class="link" data-act="signout">Sign out</button></p></div>`;
+  else a.innerHTML = `<div class="authbox">${LOGO}<h1>Can't connect</h1><p class="muted">${esc(msg||'')}</p><button class="btn primary" onclick="location.reload()">Try again</button></div>`;
+  const f=a.querySelector('input:not([hidden])'); if (f) setTimeout(()=>f.focus(),30);
+}
+function authError(msg){ const e=$('#authErr'); if(e){ e.textContent=msg; e.classList.add('on'); } }
+function hideAuth(){ document.body.classList.remove('locked'); $('#auth').innerHTML=''; }
+
+async function boot(){
+  if (!sb) { showAuth('error','The Supabase client could not load. Check your internet connection and reload the page.'); return; }
+  sb.auth.onAuthStateChange((event)=>{ if (event==='SIGNED_OUT') { resetSession(); showAuth('login'); } });
+  try {
+    const { data:{ session } } = await sb.auth.getSession();
+    if (session) await afterSignIn(session.user); else showAuth('login');
+  } catch(e) { showAuth('login', 'Your session has expired. Please sign in again.'); }
+}
+function resetSession(){ me=null; ENG=null; team=new Map(); engagements=[]; state=fresh(); synced={settings:'',files:new Map(),issues:new Map()}; ui.drawer=null; $('#drawer').classList.remove('on'); $('#scrim').classList.remove('on'); closeModal(); }
+async function afterSignIn(user){
+  const { data:p, error } = await sb.from('profiles').select('*').eq('id',user.id).single();
+  if (error || !p) { await sb.auth.signOut(); showAuth('login','This account has no Audit Tracker profile. Ask an administrator.'); return; }
+  me=p;
+  if (p.must_change_password) { showAuth('change'); return; }
+  await enterApp();
+}
+async function enterApp(){
+  try {
+    await Promise.all([loadTeam(), loadEngagements()]);
+    let id = (engagements.find(e=>e.id===lsGet(LS_ENG))||engagements[0]||{}).id;
+    if (!id) id = await createEngagement('FY2026 statutory audit');
+    await loadEngagement(id);
+  } catch(e) { console.error(e); showAuth('error','Signed in, but the workspace could not load: '+(e.message||e)); return; }
+  hideAuth(); renderAccount(); route();
+}
+function renderAccount(){
+  const av=$('#avatar'); av.textContent=initials(me); av.classList.toggle('admin', me.role==='admin'); av.title=(me.display_name||me.username)+' ('+me.role+')';
+  $('#usersTab').hidden = me.role!=='admin';
+  $('#menu').innerHTML = `<div class="who"><b>${esc(me.display_name||me.username)}</b><span class="muted sm">@${esc(me.username)} · ${me.role==='admin'?'Administrator':'Auditor'}</span></div>
+    ${me.role==='admin'?'<button data-act="gousers">Manage users</button>':''}<button data-act="chpw">Change password</button><button data-act="signout">Sign out</button>`;
+  renderEngSelect();
+}
+function renderEngSelect(){
+  const sel=$('#engSel'); if (!sel) return;
+  sel.innerHTML = engagements.map(e=>`<option value="${e.id}" ${e.id===ENG?'selected':''}>${esc([e.entity,e.name].filter(Boolean).join(' · ')||'Untitled engagement')}</option>`).join('') + '<option value="__new">＋ New engagement…</option>';
+}
+async function switchEngagement(id){
+  clearTimeout(saveTimer); await sync();
+  try { await loadEngagement(id); go('overview'); render(); toast('Switched engagement'); } catch(e){ toast('Could not open engagement: '+e.message); renderEngSelect(); }
+}
+
+// Pre-login browser data → offer to import once
+function localData(){ try { if (lsGet(LS_KEY+'.imported')) return null; const s=JSON.parse(lsGet(LS_KEY)); return (s && Array.isArray(s.issues) && (s.issues.length||(s.files||[]).length)) ? s : null; } catch(e){ return null; } }
+function localImportBanner(){
+  const d=localData(); if (!d) return '';
+  return `<div class="banner"><div><b>Found earlier work saved in this browser</b><div class="muted sm">${d.issues.length} ${plural(d.issues.length,'issue','issues')} and ${(d.files||[]).length} ${plural((d.files||[]).length,'workbook','workbooks')} from before sign-in was added. Import them into “${esc(S().engagement)}” so the team can see them.</div></div><div class="actions"><button class="btn sm ghost" data-act="localskip">Dismiss</button><button class="btn sm primary" data-act="localimport">Import to Supabase</button></div></div>`;
+}
+
+// Admin: users
+async function adminCall(body){
+  const { data, error } = await sb.functions.invoke('admin-users', { body });
+  if (error) { let msg=error.message; try { const j=await error.context.json(); msg=j.error||msg; } catch(e){} throw new Error(msg); }
+  if (data && data.error) throw new Error(data.error);
+  return data;
+}
+function userRows(){
+  const list=[...team.values()].sort((a,b)=>a.username.localeCompare(b.username));
+  return list.map(p=>`<div class="userrow">
+    <span class="avatar ${p.role==='admin'?'admin':''}">${esc(initials(p))}</span>
+    <div style="min-width:0"><b>${esc(p.display_name||p.username)}</b>${p.id===me.id?' <span class="tag">you</span>':''}<div class="muted sm">@${esc(p.username)} · since ${new Date(p.created_at).toLocaleDateString('en-SG',{day:'numeric',month:'short',year:'numeric'})}</div></div>
+    <div>${p.must_change_password?'<span class="chip r-High">Initial password</span>':'<span class="chip ghost">Password set</span>'}</div>
+    <select data-role="${p.id}" ${p.id===me.id?'disabled title="You cannot change your own role"':''}><option value="auditor" ${p.role==='auditor'?'selected':''}>Auditor</option><option value="admin" ${p.role==='admin'?'selected':''}>Administrator</option></select>
+    <div class="acts"><button class="btn sm" data-act="resetpw" data-id="${p.id}" data-name="${esc(p.username)}">Reset password</button>${p.id===me.id?'':`<button class="btn sm ghost" data-act="deluser" data-id="${p.id}">Delete</button>`}</div>
+  </div>`).join('');
+}
+function vUsers(){
+  return `<section class="hero"><div><p class="eyebrow">Administration</p><h1>Users</h1><p class="lede">Add team members and set their initial password. They sign in with their username and must choose their own password the first time.</p></div></section>
+  <section class="card" style="margin-bottom:18px"><div class="card-head"><div><h2>Add a user</h2><p class="muted sm">Passwords are stored by Supabase Auth (hashed) — never in the app's tables.</p></div></div>
+    <form id="newUser" class="field-grid" autocomplete="off">
+      <div><label>Username</label><input name="username" required pattern="[a-z0-9][a-z0-9._\\-]{1,31}" placeholder="e.g. siti" autocapitalize="none" spellcheck="false"><div class="help">Lowercase letters, numbers, . _ -</div></div>
+      <div><label>Display name</label><input name="display_name" placeholder="e.g. Siti Rahman"></div>
+      <div><label>Role</label><select name="role"><option value="auditor">Auditor</option><option value="admin">Administrator</option></select><div class="help">Administrators can manage users</div></div>
+      <div><label>Initial password</label><input name="password" required minlength="6" autocomplete="new-password" placeholder="At least 6 characters"><div class="help">User must change it at first sign-in</div></div>
+      <div style="grid-column:1/-1;display:flex;justify-content:flex-end"><button class="btn primary" type="submit" id="nuBtn">Create user</button></div>
+    </form></section>
+  <section class="card"><div class="card-head"><div><h2>Team</h2><p class="muted sm">Everyone signed in can see and edit all engagements. Only administrators can manage users or delete engagements.</p></div></div>
+    <div id="userList">${userRows()}</div></section>`;
+}
+
+function handleAccountAction(a,t,e){
+  if (a==='menu') { e.stopPropagation(); $('#menu').classList.toggle('on'); return true; }
+  if (a==='signout') { $('#menu').classList.remove('on'); clearTimeout(saveTimer); (async()=>{ try { await sync(); } catch(_){} await sb.auth.signOut(); resetSession(); showAuth('login'); toast('Signed out'); })(); return true; }
+  if (a==='gousers') { $('#menu').classList.remove('on'); go('users'); return true; }
+  if (a==='chpw') { $('#menu').classList.remove('on');
+    modal(`<div class="card-head" style="margin-bottom:0"><h2>Change password</h2><button class="icon" data-act="mclose">×</button></div>
+      <form id="chpwForm" style="display:flex;flex-direction:column;gap:14px;margin-top:16px"><input type="text" autocomplete="username" value="${esc(me.username)}" hidden>
+      <div><label>New password</label><input id="cp1" type="password" minlength="8" autocomplete="new-password" required></div>
+      <div><label>Confirm new password</label><input id="cp2" type="password" minlength="8" autocomplete="new-password" required></div>
+      <div class="actions"><button class="btn primary" type="submit">Update password</button></div></form>`); setTimeout(()=>$('#cp1')&&$('#cp1').focus(),30); return true; }
+  if (a==='resetpw') {
+    modal(`<div class="card-head" style="margin-bottom:0"><h2>Reset password for @${esc(t.dataset.name)}</h2><button class="icon" data-act="mclose">×</button></div>
+      <form id="rpForm" data-id="${t.dataset.id}" style="display:flex;flex-direction:column;gap:14px;margin-top:16px">
+      <div><label>New initial password</label><input id="rp1" minlength="6" autocomplete="new-password" required><div class="help">They will be asked to change it at next sign-in.</div></div>
+      <div class="actions"><button class="btn primary" type="submit">Reset password</button></div></form>`); setTimeout(()=>$('#rp1')&&$('#rp1').focus(),30); return true; }
+  if (a==='deluser') {
+    if (!t.dataset.armed) { t.dataset.armed='1'; t.textContent='Confirm delete'; t.classList.add('primary'); return true; }
+    t.disabled=true; adminCall({action:'delete', user_id:t.dataset.id}).then(()=>loadTeam()).then(()=>{ $('#userList').innerHTML=userRows(); toast('User deleted'); }).catch(err=>{ toast(err.message); t.disabled=false; });
+    return true; }
+  if (a==='deleng') {
+    if (!t.dataset.armed) { t.dataset.armed='1'; t.textContent='Click again to delete this engagement for everyone'; t.classList.add('primary'); return true; }
+    (async()=>{ clearTimeout(saveTimer); const { error } = await sb.from('engagements').delete().eq('id',ENG); if (error) { toast(error.message); return; }
+      engagements=engagements.filter(x=>x.id!==ENG); ENG=null; let id=(engagements[0]||{}).id; if (!id) id=await createEngagement('FY2026 statutory audit');
+      await loadEngagement(id); go('overview'); render(); toast('Engagement deleted'); })();
+    return true; }
+  if (a==='localimport') { const d=localData(); if (d) { importBackup(d,'Browser data'); lsSet(LS_KEY+'.imported','1'); } return true; }
+  if (a==='localskip') { lsSet(LS_KEY+'.imported','1'); render(); return true; }
+  return false;
+}
+document.addEventListener('click', e=>{ const m=$('#menu'); if (m && m.classList.contains('on') && !e.target.closest('.usermenu')) m.classList.remove('on'); });
+
+document.addEventListener('submit', async e=>{
+  const f=e.target; e.preventDefault();
+  if (f.id==='loginForm') {
+    const btn=$('#liBtn'); btn.disabled=true; btn.textContent='Signing in…';
+    const { data, error } = await sb.auth.signInWithPassword({ email:toEmail($('#liUser').value), password:$('#liPass').value });
+    if (error) { btn.disabled=false; btn.textContent='Sign in'; authError(/invalid/i.test(error.message)?'Incorrect username or password.':error.message); return; }
+    await afterSignIn(data.user);
+  }
+  else if (f.id==='pwForm' || f.id==='chpwForm') {
+    const a=f.id==='pwForm'?$('#pw1').value:$('#cp1').value, b=f.id==='pwForm'?$('#pw2').value:$('#cp2').value;
+    const fail = m => f.id==='pwForm' ? authError(m) : toast(m);
+    if (a!==b) return fail('The two passwords do not match.');
+    if (a.length<8) return fail('Use at least 8 characters.');
+    if (/^password$/i.test(a)) return fail('Choose something other than the initial password.');
+    const btn=f.querySelector('button[type=submit]'); btn.disabled=true;
+    const { error } = await sb.auth.updateUser({ password:a });
+    if (error) { btn.disabled=false; return fail(error.message); }
+    await sb.rpc('password_changed'); me.must_change_password=false;
+    if (f.id==='pwForm') { await enterApp(); toast('Password saved — welcome!'); } else { closeModal(); toast('Password updated'); }
+  }
+  else if (f.id==='newUser') {
+    const fd=Object.fromEntries(new FormData(f)); const btn=$('#nuBtn'); btn.disabled=true; btn.textContent='Creating…';
+    try { await adminCall({ action:'create', username:fd.username.trim().toLowerCase(), display_name:fd.display_name, role:fd.role, password:fd.password });
+      await loadTeam(); $('#userList').innerHTML=userRows(); f.reset(); toast(`User @${fd.username.trim().toLowerCase()} created`); }
+    catch(err) { toast(err.message); }
+    btn.disabled=false; btn.textContent='Create user';
+  }
+  else if (f.id==='rpForm') {
+    const btn=f.querySelector('button[type=submit]'); btn.disabled=true;
+    try { await adminCall({ action:'reset_password', user_id:f.dataset.id, password:$('#rp1').value }); await loadTeam(); const l=$('#userList'); if (l) l.innerHTML=userRows(); closeModal(); toast('Password reset — they must change it at next sign-in'); }
+    catch(err) { toast(err.message); btn.disabled=false; }
+  }
+});
+document.addEventListener('change', e=>{
+  const t=e.target;
+  if (t.id==='engSel') {
+    if (t.value==='__new') {
+      modal(`<div class="card-head" style="margin-bottom:0"><h2>New engagement</h2><button class="icon" data-act="mclose">×</button></div>
+        <form id="newEng" style="display:flex;flex-direction:column;gap:14px;margin-top:16px"><div><label>Engagement name</label><input id="neName" required placeholder="e.g. FY2025 statutory audit"></div>
+        <div><label>Entity</label><input id="neEntity" placeholder="e.g. Merlion Precision Components Pte. Ltd."></div>
+        <div class="actions"><button class="btn primary" type="submit">Create engagement</button></div></form>`);
+      renderEngSelect(); setTimeout(()=>$('#neName')&&$('#neName').focus(),30);
+    } else if (t.value!==ENG) switchEngagement(t.value);
+  }
+  if (t.dataset.role) {
+    t.disabled=true;
+    adminCall({ action:'update', user_id:t.dataset.role, role:t.value }).then(()=>loadTeam()).then(()=>{ $('#userList').innerHTML=userRows(); toast('Role updated'); })
+      .catch(err=>{ toast(err.message); loadTeam().then(()=>{ $('#userList').innerHTML=userRows(); }); });
+  }
+});
+document.addEventListener('submit', async e=>{
+  if (e.target.id!=='newEng') return;
+  const name=$('#neName').value.trim(), entity=$('#neEntity').value.trim();
+  try { clearTimeout(saveTimer); await sync(); const id=await createEngagement(name);
+    if (entity) { await sb.from('engagements').update({entity}).eq('id',id); const x=engagements.find(z=>z.id===id); if (x) x.entity=entity; }
+    closeModal(); await loadEngagement(id); go('workpapers'); render(); toast('Engagement created'); }
+  catch(err){ toast(err.message); }
+});
+window.addEventListener('beforeunload', ev=>{ if (ENG && (syncing || saveTimer && $('#saveStatus').textContent==='Saving…')) { ev.preventDefault(); ev.returnValue=''; } });
+
 // Backup link in footer
-document.querySelector('footer.foot').insertAdjacentHTML('beforeend',' <button class="link sm" data-act="backup">Back up / restore data</button>');
-route();
+document.querySelector('footer.foot').insertAdjacentHTML('beforeend',' <button class="link sm" data-act="backup">Back up / import data</button>');
+boot();
 </script>
 </body>
 </html>
